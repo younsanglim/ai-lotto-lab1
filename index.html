@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 로또 연구소</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <h1>🎱 AI LOTTO LAB</h1>
+    <p>숫자 속 패턴을 탐구하는 나만의 로또 연구소</p>
+  </header>
+
+  <main class="container">
+    <section class="intro">
+      <p class="tag">LOTTO NUMBER LAB</p>
+      <h2>오늘의 번호를<br>만들어 볼까요?</h2>
+      <p class="description">
+        번호를 생성하고, 데이터 분석을 통해 숫자의 특징을 알아보세요.
+      </p>
+
+      <div id="lottoNumbers" class="lotto-numbers">
+        <span class="placeholder">?</span>
+        <span class="placeholder">?</span>
+        <span class="placeholder">?</span>
+        <span class="placeholder">?</span>
+        <span class="placeholder">?</span>
+        <span class="placeholder">?</span>
+      </div>
+
+      <button id="generateButton">번호 생성하기</button>
+      <p id="message">모든 번호 조합의 당첨 확률은 동일합니다.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>AI LOTTO LAB · DATA &amp; DISCOVERY</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
