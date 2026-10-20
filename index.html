@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -13,6 +14,7 @@
   </header>
 
   <main class="container">
+    <!-- 로또 번호 생성 -->
     <section class="intro">
       <p class="tag">LOTTO NUMBER LAB</p>
       <h2>오늘의 번호를<br>만들어 볼까요?</h2>
@@ -32,10 +34,25 @@
       <button id="generateButton">번호 생성하기</button>
       <p id="message">모든 번호 조합의 당첨 확률은 동일합니다.</p>
     </section>
+
+    <!-- 과거 당첨 번호 통계 -->
+    <section class="stats-section">
+      <p class="tag">LOTTO DATA</p>
+      <h2>당첨 번호 통계</h2>
+      <p class="description">
+        과거 당첨 번호의 등장 횟수를 살펴보세요.
+      </p>
+
+      <button id="loadStatsButton">당첨 통계 불러오기</button>
+      <p id="statsMessage">버튼을 눌러 통계 데이터를 불러오세요.</p>
+
+      <div id="statsResults"></div>
+    </section>
   </main>
 
   <footer>
     <p>AI LOTTO LAB · DATA &amp; DISCOVERY</p>
+    <p>※ 과거 당첨 번호는 미래의 당첨 결과를 예측하지 않습니다.</p>
   </footer>
 
   <script src="app.js"></script>
