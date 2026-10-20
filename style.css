@@ -1,32 +1,195 @@
-```css
-/* 당첨 번호 통계 */
+
+/* 기본 설정 */
+:root {
+  --background: #0b1020;
+  --surface: #131b30;
+  --gold: #f5c96a;
+  --gold-light: #ffe5a3;
+  --text: #f5f7ff;
+  --muted: #9ba7c0;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at top,
+      #202b49 0%,
+      var(--background) 48%
+    );
+  color: var(--text);
+  font-family: Arial, "Malgun Gothic", sans-serif;
+  line-height: 1.6;
+}
+
+/* 상단 제목 */
+.header {
+  text-align: center;
+  padding: 40px 20px 25px;
+}
+
+.header h1 {
+  color: var(--gold);
+  font-size: 32px;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+
+.header p {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* 전체 영역 */
+.container {
+  width: min(900px, 92%);
+  margin: 0 auto;
+  padding: 10px 0 40px;
+}
+
+/* 번호 생성 영역 */
+.intro {
+  padding: 45px 25px;
+  text-align: center;
+  background: linear-gradient(
+    145deg,
+    #192440,
+    var(--surface)
+  );
+  border: 1px solid rgba(245, 201, 106, 0.3);
+  border-radius: 24px;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
+}
+
+.tag {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  margin-bottom: 18px;
+}
+
+.intro h2 {
+  font-size: 36px;
+  line-height: 1.4;
+  margin-bottom: 18px;
+}
+
+.description {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 auto;
+  max-width: 550px;
+}
+
+/* 로또 공 영역 */
+.lotto-numbers {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 35px 0;
+}
+
+.lotto-ball,
+.placeholder {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 55px;
+  height: 55px;
+  border-radius: 50%;
+  font-size: 19px;
+  font-weight: bold;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.25);
+}
+
+.placeholder {
+  background: #293550;
+  color: var(--gold);
+  border: 1px dashed #63708a;
+}
+
+.lotto-ball {
+  animation: popIn 0.35s ease both;
+}
+
+/* 버튼 */
+#generateButton,
+#loadStatsButton {
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+#generateButton {
+  background: linear-gradient(
+    135deg,
+    var(--gold-light),
+    var(--gold)
+  );
+  color: #171b27;
+  border: none;
+  box-shadow: 0 5px 18px rgba(245, 201, 106, 0.2);
+}
+
+#generateButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(245, 201, 106, 0.3);
+}
+
+#message {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 22px;
+}
+
+/* 당첨 통계 영역 */
 .stats-section {
   margin-top: 28px;
-  padding: 35px 25px;
+  padding: 38px 25px;
   background: var(--surface);
   border: 1px solid rgba(245, 201, 106, 0.2);
   border-radius: 24px;
   text-align: center;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
 }
 
 .stats-section h2 {
-  margin-bottom: 15px;
+  color: var(--text);
   font-size: 28px;
+  margin-bottom: 15px;
+}
+
+.stats-section .tag {
+  margin-bottom: 12px;
 }
 
 #loadStatsButton {
   margin-top: 25px;
-  padding: 13px 24px;
-  border: 1px solid var(--gold);
-  border-radius: 10px;
   background: transparent;
+  border: 1px solid var(--gold);
   color: var(--gold);
-  font-weight: bold;
-  cursor: pointer;
 }
 
 #loadStatsButton:hover {
   background: rgba(245, 201, 106, 0.12);
+  transform: translateY(-2px);
+}
+
+#loadStatsButton:disabled {
+  opacity: 0.5;
+  cursor: wait;
 }
 
 #statsMessage {
@@ -35,44 +198,102 @@
   font-size: 13px;
 }
 
+/* 통계 결과 카드 */
 #statsResults {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(180px, 1fr)
+  );
+  gap: 14px;
   margin-top: 20px;
   text-align: left;
 }
 
 .stat-card {
-  padding: 16px;
-  border-radius: 12px;
+  padding: 20px;
+  border-radius: 14px;
   background: #0b1020;
   border: 1px solid #28344c;
+  overflow-wrap: anywhere;
 }
 
 .stat-card h3 {
   color: var(--gold);
   font-size: 14px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .stat-card p {
   color: var(--text);
   font-size: 13px;
-  line-height: 1.8;
+  line-height: 2;
 }
 
-.stats-section .tag {
-  margin-bottom: 16px;
+/* 하단 */
+footer {
+  padding: 25px 15px 35px;
+  text-align: center;
+  color: #78849e;
+  font-size: 11px;
 }
 
-@media (max-width: 480px) {
+footer p + p {
+  margin-top: 8px;
+}
+
+/* 번호가 나타나는 애니메이션 */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 모바일 화면 */
+@media (max-width: 600px) {
+  .header {
+    padding-top: 30px;
+  }
+
+  .header h1 {
+    font-size: 25px;
+  }
+
+  .intro {
+    padding: 35px 16px;
+  }
+
+  .intro h2 {
+    font-size: 29px;
+  }
+
+  .lotto-numbers {
+    gap: 8px;
+    margin: 28px 0;
+  }
+
+  .lotto-ball,
+  .placeholder {
+    width: 43px;
+    height: 43px;
+    font-size: 15px;
+  }
+
   .stats-section {
-    padding: 28px 15px;
+    padding: 30px 16px;
   }
 
   .stats-section h2 {
     font-size: 24px;
   }
+
+  #statsResults {
+    grid-template-columns: 1fr;
+  }
 }
-```
