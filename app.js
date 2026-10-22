@@ -7,7 +7,13 @@ const loadStatsButton = document.getElementById("loadStatsButton");
 const statsMessage = document.getElementById("statsMessage");
 const statsResults = document.getElementById("statsResults");
 
-// 번호별 공 색상
+const analyzeButton = document.getElementById("analyzeButton");
+const aiMessage = document.getElementById("aiMessage");
+const aiResult = document.getElementById("aiResult");
+
+let currentNumbers = [];
+
+// 로또 번호별 공 색상
 function getBallColor(number) {
   if (number <= 10) return "#fbc531";
   if (number <= 20) return "#4a90e2";
@@ -50,14 +56,60 @@ function displayLottoNumbers(numbers) {
 
 // 번호 생성 버튼
 generateButton.addEventListener("click", () => {
-  const numbers = generateLottoNumbers();
+  currentNumbers = generateLottoNumbers();
 
-  displayLottoNumbers(numbers);
+  displayLottoNumbers(currentNumbers);
 
   message.textContent =
     "새로운 번호가 생성됐어요! 모든 조합의 당첨 확률은 동일합니다.";
 
   generateButton.textContent = "다시 생성하기";
+
+  analyzeButton.disabled = false;
+  aiMessage.textContent = "AI 버튼을 눌러 번호 특징을 분석해 보세요.";
+  aiResult.textContent = "";
+});
+
+// Gemini AI 분석 버튼
+analyzeButton.addEventListener("click", async () => {
+  if (currentNumbers.length !== 6) {
+    aiMessage.textContent = "먼저 로또 번호를 생성해 주세요.";
+    return;
+  }
+
+  analyzeButton.disabled = true;
+  aiMessage.textContent = "Gemini AI가 분석하고 있어요...";
+  aiResult.textContent = "";
+
+  try {
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        numbers: currentNumbers
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "AI 분석에 실패했어요."
+      );
+    }
+
+    aiResult.textContent = data.result;
+    aiMessage.textContent = "AI 분석이 완료됐어요!";
+  } catch (error) {
+    console.error("AI 분석 오류:", error);
+
+    aiMessage.textContent =
+      error.message || "연결에 실패했어요. 다시 시도해 주세요.";
+  } finally {
+    analyzeButton.disabled = false;
+  }
 });
 
 // 과거 당첨 번호 통계
@@ -68,42 +120,24 @@ loadStatsButton.addEventListener("click", async () => {
 
   try {
     const response = await fetch(
-      "https://api.lotto-haru.kr/win/analysis.json"
+      "https://smok95.github.io/lotto/results/all.json"
     );
 
     if (!response.ok) {
-      throw new Error("데이터 요청 실패");
+      throw new Error("당첨 데이터 요청에 실패했어요.");
     }
 
     const rawData = await response.json();
 
-    // 응답 데이터 형태 확인
-    let draws = Array.isArray(rawData)
+    const draws = Array.isArray(rawData)
       ? rawData
-      : rawData.data ?? rawData.results ?? [];
+      : [rawData];
 
-    if (!Array.isArray(draws)) {
-      draws = [];
-    }
-
-    // 회차와 번호 정리
     const validDraws = draws
-      .map((draw) => {
-        const round = Number(
-          draw.chasu ?? draw.draw_no ?? draw.round
-        );
-
-        let numbers = draw.ball ?? draw.numbers;
-
-        if (typeof numbers === "string") {
-          numbers = numbers
-            .split(/[,\s]+/)
-            .filter(Boolean)
-            .map(Number);
-        }
-
-        return { round, numbers };
-      })
+      .map((draw) => ({
+        round: Number(draw.draw_no),
+        numbers: draw.numbers
+      }))
       .filter(
         (draw) =>
           Number.isFinite(draw.round) &&
@@ -119,10 +153,9 @@ loadStatsButton.addEventListener("click", async () => {
       .sort((a, b) => a.round - b.round);
 
     if (validDraws.length === 0) {
-      throw new Error("분석할 당첨 데이터가 없어요.");
+      throw new Error("분석할 수 있는 당첨 데이터가 없어요.");
     }
 
-    // 번호별 출현 횟수 계산
     const frequency = Array(46).fill(0);
 
     validDraws.forEach((draw) => {
@@ -141,12 +174,7 @@ loadStatsButton.addEventListener("click", async () => {
       )
       .slice(0, 10);
 
-    const recentDraws = validDraws
-      .slice(-5)
-      .reverse();
-
-    // 통계 결과 화면에 표시
-    statsResults.innerHTML = "";
+    const recentDraws = validDraws.slice(-5).reverse();
 
     const cards = [
       {
@@ -190,12 +218,12 @@ loadStatsButton.addEventListener("click", async () => {
     });
 
     statsMessage.textContent =
-      "통계를 불러왔어요! 과거 출현 횟수가 미래의 당첨 확률을 높여 주지는 않습니다.";
+      "통계 데이터를 불러왔어요. 과거 출현 빈도가 미래 당첨 확률을 높여 주지는 않습니다.";
   } catch (error) {
-    console.error("통계 불러오기 오류:", error);
+    console.error("통계 오류:", error);
 
     statsMessage.textContent =
-      "통계 데이터를 불러오지 못했어요. 외부 API 연결이나 데이터 형식을 확인해 주세요.";
+      "통계 데이터를 불러오지 못했어요. 데이터 연결을 확인해 주세요.";
   } finally {
     loadStatsButton.disabled = false;
   }
