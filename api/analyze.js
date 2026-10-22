@@ -10,7 +10,7 @@ export default async function handler(req, res) {
 
   if (!apiKey) {
     return res.status(500).json({
-      error: "서버에 Gemini API 키가 설정되지 않았어요."
+      error: "GEMINI_API_KEY 환경변수가 설정되지 않았어요."
     });
   }
 
@@ -32,83 +32,115 @@ export default async function handler(req, res) {
   const sortedNumbers = [...numbers].sort((a, b) => a - b);
   const oddCount = sortedNumbers.filter((n) => n % 2 === 1).length;
   const evenCount = 6 - oddCount;
-  const ranges = [
-    sortedNumbers.filter((n) => n <= 15).length,
-    sortedNumbers.filter((n) => n >= 16 && n <= 30).length,
-    sortedNumbers.filter((n) => n >= 31).length
-  ];
 
-  try {
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{
-              text: "너는 한국어로 설명하는 로또 숫자 특징 분석 도우미야. 당첨을 예측하거나 당첨 확률이 높다고 주장하지 마. 제공된 통계만 사실로 설명하고, 과거 출현 빈도를 모르면 지어내지 마."
-            }]
-          },
-          contents: [{
-            parts: [{
-              text: `
-다음 로또 번호의 특징을 초보자도 이해하기 쉽게 분석해 줘.
+  const low = sortedNumbers.filter((n) => n <= 15).length;
+  const middle = sortedNumbers.filter(
+    (n) => n >= 16 && n <= 30
+  ).length;
+  const high = sortedNumbers.filter((n) => n >= 31).length;
+
+  const prompt = `
+다음 로또 번호의 특징을 한국어로 쉽게 분석해 줘.
 
 번호: ${sortedNumbers.join(", ")}
-홀수 개수: ${oddCount}
-짝수 개수: ${evenCount}
-1~15 구간 개수: ${ranges[0]}
-16~30 구간 개수: ${ranges[1]}
-31~45 구간 개수: ${ranges[2]}
 
-다음 항목을 포함해 줘.
-1. 번호의 홀짝 구성
+분석할 내용:
+1. 홀수와 짝수의 개수
 2. 번호 구간별 분포
-3. 번호 구성의 특징
-4. 마지막에 모든 조합의 당첨 확률은 동일하다는 안내
+   - 1~15: ${low}개
+   - 16~30: ${middle}개
+   - 31~45: ${high}개
+3. 번호 구성에서 눈에 띄는 특징
+4. 모든 번호 조합의 당첨 확률은 동일하다는 안내
 
-읽기 편하게 소제목을 사용하고 한국어로 답해 줘.
-`
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 700
-          }
-        })
+당첨 번호를 예측하거나 이 조합이 당첨에 유리하다고 말하지 마.
+소제목을 사용해 읽기 쉽게 설명해 줘.
+`;
+
+  // 최신 모델부터 차례대로 시도합니다.
+  const models = [
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite"
+  ];
+
+  let lastStatus = 502;
+  let lastMessage = "";
+
+  for (const model of models) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: prompt }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 800
+            }
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        lastStatus = response.status;
+        lastMessage =
+          data.error?.message || "알 수 없는 Gemini API 오류";
+
+        console.error("Gemini API error:", {
+          model,
+          status: response.status,
+          message: lastMessage
+        });
+
+        // 모델을 찾을 수 없거나 지원되지 않으면 다음 모델을 시도합니다.
+        if (
+          response.status === 404 ||
+          response.status === 400
+        ) {
+          continue;
+        }
+
+        // 권한이나 사용량 오류는 모델 변경으로 해결되지 않을 수 있습니다.
+        return res.status(502).json({
+          error: `Gemini API 요청 실패 (${response.status}). ${lastMessage}`
+        });
       }
-    );
 
-    const data = await response.json();
+      const result = data.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text || "")
+        .join("\n")
+        .trim();
 
-    if (!response.ok) {
-      console.error("Gemini API error:", data);
-      return res.status(502).json({
-        error: "AI 분석에 실패했어요. API 키, 사용량 또는 모델 설정을 확인해 주세요."
-      });
+      if (result) {
+        return res.status(200).json({
+          result,
+          model
+        });
+      }
+
+      lastStatus = 502;
+      lastMessage = "AI가 분석 결과를 반환하지 않았어요.";
+    } catch (error) {
+      console.error("Gemini connection error:", error);
+      lastStatus = 502;
+      lastMessage = "Gemini 서버에 연결하지 못했어요.";
     }
-
-    const result = data.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || "")
-      .join("\n")
-      .trim();
-
-    if (!result) {
-      return res.status(502).json({
-        error: "AI가 분석 결과를 반환하지 않았어요. 다시 시도해 주세요."
-      });
-    }
-
-    return res.status(200).json({ result });
-  } catch (error) {
-    console.error("Analysis error:", error);
-
-    return res.status(500).json({
-      error: "서버에서 오류가 발생했어요. 잠시 후 다시 시도해 주세요."
-    });
   }
+
+  return res.status(502).json({
+    error: `사용 가능한 Gemini 모델로 분석하지 못했어요. 마지막 오류 (${lastStatus}): ${lastMessage}`
+  });
 }
