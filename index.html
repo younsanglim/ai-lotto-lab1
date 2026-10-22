@@ -14,12 +14,11 @@
   </header>
 
   <main class="container">
-    <!-- 로또 번호 생성 -->
     <section class="intro">
       <p class="tag">LOTTO NUMBER LAB</p>
       <h2>오늘의 번호를<br>만들어 볼까요?</h2>
       <p class="description">
-        번호를 생성하고, 데이터 분석을 통해 숫자의 특징을 알아보세요.
+        번호를 생성하고 AI를 통해 숫자의 특징을 알아보세요.
       </p>
 
       <div id="lottoNumbers" class="lotto-numbers">
@@ -32,10 +31,24 @@
       </div>
 
       <button id="generateButton">번호 생성하기</button>
-      <p id="message">모든 번호 조합의 당첨 확률은 동일합니다.</p>
+
+      <p id="message">
+        모든 번호 조합의 당첨 확률은 동일합니다.
+      </p>
+
+      <div class="ai-section">
+        <button id="analyzeButton" disabled>
+          AI 번호 분석하기
+        </button>
+
+        <p id="aiMessage">
+          먼저 로또 번호를 생성해 주세요.
+        </p>
+
+        <div id="aiResult" class="ai-result"></div>
+      </div>
     </section>
 
-    <!-- 과거 당첨 번호 통계 -->
     <section class="stats-section">
       <p class="tag">LOTTO DATA</p>
       <h2>당첨 번호 통계</h2>
@@ -52,7 +65,7 @@
 
   <footer>
     <p>AI LOTTO LAB · DATA &amp; DISCOVERY</p>
-    <p>※ 과거 당첨 번호는 미래의 당첨 결과를 예측하지 않습니다.</p>
+    <p>AI 분석은 당첨을 예측하지 않으며 모든 조합의 당첨 확률은 동일합니다.</p>
   </footer>
 
   <script src="app.js"></script>
