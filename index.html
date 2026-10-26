@@ -2,72 +2,183 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090910" />
   <title>AI 로또 연구소</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/app.js" defer></script>
 </head>
 <body>
-  <header class="header">
-    <h1>🎱 AI LOTTO LAB</h1>
-    <p>숫자 속 패턴을 탐구하는 나만의 로또 연구소</p>
-  </header>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/">
+        <span class="brand-icon">✳</span>
+        <span>LOTTO<span class="brand-accent">LAB</span></span>
+      </a>
 
-  <main class="container">
-    <section class="intro">
-      <p class="tag">LOTTO NUMBER LAB</p>
-      <h2>오늘의 번호를<br>만들어 볼까요?</h2>
-      <p class="description">
-        번호를 생성하고 AI를 통해 숫자의 특징을 알아보세요.
-      </p>
+      <div class="side-label">WORKSPACE</div>
+      <a class="nav-item active" href="#analysis">◈ <span>AI 분석하기</span></a>
+      <a class="nav-item" href="#statistics">▥ <span>통계 대시보드</span></a>
 
-      <div id="lottoNumbers" class="lotto-numbers">
-        <span class="placeholder">?</span>
-        <span class="placeholder">?</span>
-        <span class="placeholder">?</span>
-        <span class="placeholder">?</span>
-        <span class="placeholder">?</span>
-        <span class="placeholder">?</span>
+      <div class="sidebar-bottom">
+        <span class="status-dot"></span>
+        <span>AI 분석 시스템</span>
+        <span class="status-text">READY</span>
       </div>
+    </aside>
 
-      <button id="generateButton">번호 생성하기</button>
+    <main class="main-content" id="analysis">
+      <header class="topbar">
+        <div class="breadcrumb">WORKSPACE <span>/</span> AI ANALYSIS</div>
+        <div class="top-status"><span class="status-dot"></span> SYSTEM ONLINE</div>
+      </header>
 
-      <p id="message">
-        모든 번호 조합의 당첨 확률은 동일합니다.
-      </p>
+      <section class="hero">
+        <div class="eyebrow"><span>✦</span> INTELLIGENT LOTTO ANALYTICS</div>
+        <h1>AI 번호 <span class="gradient-text">분석 연구소</span></h1>
+        <p>과거 당첨 데이터를 분석하고 AI의 해설을 확인해 보세요.</p>
 
-      <div class="ai-section">
-        <button id="analyzeButton" disabled>
-          AI 번호 분석하기
+        <div class="hero-bottom">
+          <div class="data-chip"><span class="status-dot"></span> Supabase 데이터 연동</div>
+          <div class="data-chip">✦ Gemini AI 분석</div>
+        </div>
+      </section>
+
+      <section class="control-panel panel">
+        <div>
+          <div class="section-kicker">ANALYSIS CONTROL</div>
+          <h2>분석을 시작할 준비가 되었어요</h2>
+          <p class="muted">저장된 당첨 번호의 통계와 AI 해설을 생성합니다.</p>
+        </div>
+        <button id="analyzeBtn" class="primary-btn">
+          <span>✦</span> AI 분석 시작하기 <span class="btn-arrow">↗</span>
         </button>
+      </section>
 
-        <p id="aiMessage">
-          먼저 로또 번호를 생성해 주세요.
-        </p>
-
-        <div id="aiResult" class="ai-result"></div>
+      <div id="loading" class="loading-panel hidden">
+        <div class="loader"></div>
+        <div>
+          <strong>데이터를 분석하고 있어요</strong>
+          <p>과거 회차 통계와 AI 해설을 준비하고 있습니다.</p>
+        </div>
       </div>
-    </section>
 
-    <section class="stats-section">
-      <p class="tag">LOTTO DATA</p>
-      <h2>당첨 번호 통계</h2>
-      <p class="description">
-        과거 당첨 번호의 등장 횟수를 살펴보세요.
-      </p>
+      <div id="errorBox" class="error-box hidden" role="alert"></div>
 
-      <button id="loadStatsButton">당첨 통계 불러오기</button>
-      <p id="statsMessage">버튼을 눌러 통계 데이터를 불러오세요.</p>
+      <section class="dashboard-grid">
+        <article class="panel number-panel">
+          <div class="panel-heading">
+            <div>
+              <div class="section-kicker">GENERATED COMBINATION</div>
+              <h2>분석 번호</h2>
+            </div>
+            <span class="subtle-tag">참고용 조합</span>
+          </div>
 
-      <div id="statsResults"></div>
-    </section>
-  </main>
+          <div id="numberBalls" class="number-balls">
+            <span class="ball-placeholder">?</span>
+            <span class="ball-placeholder">?</span>
+            <span class="ball-placeholder">?</span>
+            <span class="ball-placeholder">?</span>
+            <span class="ball-placeholder">?</span>
+            <span class="ball-placeholder">?</span>
+          </div>
 
-  <footer>
-    <p>AI LOTTO LAB · DATA &amp; DISCOVERY</p>
-    <p>AI 분석은 당첨을 예측하지 않으며 모든 조합의 당첨 확률은 동일합니다.</p>
-  </footer>
+          <div class="number-caption">
+            <span class="purple-line"></span>
+            <span id="numberCaption">AI 분석을 시작하면 번호가 표시됩니다.</span>
+          </div>
+        </article>
 
-  <script src="app.js"></script>
+        <article class="panel summary-panel">
+          <div class="panel-heading">
+            <div>
+              <div class="section-kicker">DATA OVERVIEW</div>
+              <h2>분석 데이터</h2>
+            </div>
+            <span class="mini-icon">▥</span>
+          </div>
+          <div class="metric-row">
+            <div class="metric">
+              <span>분석 회차</span>
+              <strong id="roundCount">-</strong>
+              <small>저장된 당첨 데이터</small>
+            </div>
+            <div class="metric">
+              <span>최신 회차</span>
+              <strong id="latestRound">-</strong>
+              <small>DB 기준</small>
+            </div>
+          </div>
+          <div class="summary-foot">
+            <span class="status-dot"></span>
+            <span id="dataStatus">분석 전</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel stats-panel" id="statistics">
+        <div class="panel-heading">
+          <div>
+            <div class="section-kicker">HISTORICAL DATA</div>
+            <h2>당첨 번호 통계</h2>
+            <p class="muted">과거 데이터에서 관찰된 특징입니다.</p>
+          </div>
+          <span class="subtle-tag">HISTORY</span>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-icon">↗</span>
+            <h3>출현 빈도 TOP 5</h3>
+            <div id="frequencyChart" class="frequency-chart">
+              <p class="empty-text">분석 후 통계가 표시됩니다.</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">◉</span>
+            <h3>홀수와 짝수</h3>
+            <div id="oddEvenStats" class="distribution">
+              <p class="empty-text">아직 분석 데이터가 없습니다.</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">▤</span>
+            <h3>번호 구간 분포</h3>
+            <div id="rangeStats" class="distribution">
+              <p class="empty-text">아직 분석 데이터가 없습니다.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel explanation-panel">
+        <div class="panel-heading">
+          <div>
+            <div class="section-kicker">GEMINI INTELLIGENCE</div>
+            <h2>AI 분석 해설</h2>
+            <p class="muted">숫자만 나열하지 않고 통계의 의미를 설명합니다.</p>
+          </div>
+          <span class="ai-badge">✦ AI INSIGHT</span>
+        </div>
+
+        <div id="explanationContent" class="explanation-content">
+          <div class="empty-insight">
+            <div class="insight-symbol">✳</div>
+            <h3>데이터 속 특징을 발견해 보세요</h3>
+            <p>AI 분석 시작하기를 누르면 출현 빈도, 번호 분포, 분석 조합에 대한 해설이 여기에 표시됩니다.</p>
+          </div>
+        </div>
+
+        <div class="disclaimer">
+          <span>ⓘ</span>
+          <p>로또 추첨은 무작위입니다. 과거 출현 빈도나 AI 분석 결과는 다음 회차의 당첨을 예측하거나 보장하지 않습니다. 모든 번호 조합의 당첨 확률은 동일합니다.</p>
+        </div>
+      </section>
+
+      <footer>LOTTO LAB <span>·</span> DATA-DRIVEN INSIGHTS, NOT PREDICTIONS</footer>
+    </main>
+  </div>
 </body>
 </html>
