@@ -1,146 +1,197 @@
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "POST 요청만 사용할 수 있어요."
-    });
-  }
+const { createClient } = require("@supabase/supabase-js");
 
-  const apiKey = process.env.GEMINI_API_KEY;
+function makeStats(rows) {
+  const frequency = Array.from({ length: 45 }, (_, i) => ({
+    number: i + 1,
+    count: 0
+  }));
 
-  if (!apiKey) {
-    return res.status(500).json({
-      error: "GEMINI_API_KEY 환경변수가 설정되지 않았어요."
-    });
-  }
-
-  const numbers = req.body?.numbers;
-
-  if (
-    !Array.isArray(numbers) ||
-    numbers.length !== 6 ||
-    !numbers.every(
-      (n) => Number.isInteger(n) && n >= 1 && n <= 45
-    ) ||
-    new Set(numbers).size !== 6
-  ) {
-    return res.status(400).json({
-      error: "올바른 로또 번호 6개를 보내 주세요."
-    });
-  }
-
-  const sortedNumbers = [...numbers].sort((a, b) => a - b);
-  const oddCount = sortedNumbers.filter((n) => n % 2 === 1).length;
-  const evenCount = 6 - oddCount;
-
-  const low = sortedNumbers.filter((n) => n <= 15).length;
-  const middle = sortedNumbers.filter(
-    (n) => n >= 16 && n <= 30
-  ).length;
-  const high = sortedNumbers.filter((n) => n >= 31).length;
-
-  const prompt = `
-다음 로또 번호의 특징을 한국어로 쉽게 분석해 줘.
-
-번호: ${sortedNumbers.join(", ")}
-
-분석할 내용:
-1. 홀수와 짝수의 개수
-2. 번호 구간별 분포
-   - 1~15: ${low}개
-   - 16~30: ${middle}개
-   - 31~45: ${high}개
-3. 번호 구성에서 눈에 띄는 특징
-4. 모든 번호 조합의 당첨 확률은 동일하다는 안내
-
-당첨 번호를 예측하거나 이 조합이 당첨에 유리하다고 말하지 마.
-소제목을 사용해 읽기 쉽게 설명해 줘.
-`;
-
-  // 최신 모델부터 차례대로 시도합니다.
-  const models = [
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash-lite"
+  const oddEven = [
+    { label: "홀수", count: 0 },
+    { label: "짝수", count: 0 }
   ];
 
-  let lastStatus = 502;
-  let lastMessage = "";
+  const ranges = [
+    { label: "1–10", count: 0 },
+    { label: "11–20", count: 0 },
+    { label: "21–30", count: 0 },
+    { label: "31–40", count: 0 },
+    { label: "41–45", count: 0 }
+  ];
 
-  for (const model of models) {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: prompt }]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 800
-            }
-          })
-        }
-      );
+  for (const row of rows) {
+    const numbers = [
+      row.num1, row.num2, row.num3,
+      row.num4, row.num5, row.num6
+    ].map(Number);
 
-      const data = await response.json();
+    for (const n of numbers) {
+      if (!Number.isInteger(n) || n < 1 || n > 45) continue;
 
-      if (!response.ok) {
-        lastStatus = response.status;
-        lastMessage =
-          data.error?.message || "알 수 없는 Gemini API 오류";
+      frequency[n - 1].count++;
+      oddEven[n % 2 === 1 ? 0 : 1].count++;
 
-        console.error("Gemini API error:", {
-          model,
-          status: response.status,
-          message: lastMessage
-        });
-
-        // 모델을 찾을 수 없거나 지원되지 않으면 다음 모델을 시도합니다.
-        if (
-          response.status === 404 ||
-          response.status === 400
-        ) {
-          continue;
-        }
-
-        // 권한이나 사용량 오류는 모델 변경으로 해결되지 않을 수 있습니다.
-        return res.status(502).json({
-          error: `Gemini API 요청 실패 (${response.status}). ${lastMessage}`
-        });
-      }
-
-      const result = data.candidates?.[0]?.content?.parts
-        ?.map((part) => part.text || "")
-        .join("\n")
-        .trim();
-
-      if (result) {
-        return res.status(200).json({
-          result,
-          model
-        });
-      }
-
-      lastStatus = 502;
-      lastMessage = "AI가 분석 결과를 반환하지 않았어요.";
-    } catch (error) {
-      console.error("Gemini connection error:", error);
-      lastStatus = 502;
-      lastMessage = "Gemini 서버에 연결하지 못했어요.";
+      const rangeIndex = Math.min(Math.floor((n - 1) / 10), 4);
+      ranges[rangeIndex].count++;
     }
   }
 
-  return res.status(502).json({
-    error: `사용 가능한 Gemini 모델로 분석하지 못했어요. 마지막 오류 (${lastStatus}): ${lastMessage}`
-  });
+  return {
+    roundCount: rows.length,
+    latestRound: rows.length
+      ? Math.max(...rows.map((row) => Number(row.round) || 0))
+      : 0,
+    frequency: frequency
+      .sort((a, b) => b.count - a.count || a.number - b.number)
+      .slice(0, 5),
+    oddEven,
+    ranges
+  };
 }
+
+function makeCombination() {
+  const pool = Array.from({ length: 45 }, (_, i) => i + 1);
+
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  return pool.slice(0, 6).sort((a, b) => a - b);
+}
+
+async function getExplanation(stats, numbers) {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Vercel의 GEMINI_API_KEY 설정을 확인해 주세요.");
+  }
+
+  const prompt = `
+너는 로또 과거 데이터 통계를 쉽게 설명하는 데이터 분석 도우미야.
+
+아래 통계는 실제 과거 당첨 데이터에서 계산한 값이야.
+분석 조합은 무작위로 생성되었으며, 미래 당첨 예측 결과가 아니야.
+
+분석 데이터:
+${JSON.stringify(stats)}
+
+참고 조합:
+${JSON.stringify(numbers)}
+
+한국어로 설명해. 과장하지 말고, 출현 빈도가 높다고 미래 당첨 가능성이 높다고 말하지 마.
+정확한 수치가 제공되지 않은 사실은 추측하지 마.
+아래 JSON 형식으로만 답해. 마크다운 코드 블록은 쓰지 마.
+
+{
+  "summary": "분석한 데이터와 회차 수에 대한 쉬운 요약",
+  "frequency": "출현 빈도 상위 번호 통계의 의미와 한계",
+  "distribution": "홀짝 비율 및 번호 구간 분포의 특징",
+  "combination": "생성된 번호 조합의 홀짝 및 구간 분포를 설명",
+  "caution": "과거 통계와 무작위 추첨에 관한 주의사항"
+}
+`;
+
+  const response = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.4
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const details = await response.text();
+    console.error("Gemini API error:", response.status, details);
+    throw new Error(`Gemini API 요청 실패 (HTTP ${response.status})`);
+  }
+
+  const result = await response.json();
+  const text = result.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || "")
+    .join("");
+
+  if (!text) {
+    throw new Error("Gemini에서 분석 해설을 받지 못했습니다.");
+  }
+
+  const explanation = JSON.parse(text);
+
+  for (const key of [
+    "summary", "frequency", "distribution", "combination", "caution"
+  ]) {
+    if (typeof explanation[key] !== "string") {
+      throw new Error("AI 해설의 응답 형식이 올바르지 않습니다.");
+    }
+  }
+
+  return explanation;
+}
+
+module.exports = async (req, res) => {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({
+      success: false,
+      message: "POST 요청만 허용됩니다."
+    });
+  }
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    return res.status(500).json({
+      success: false,
+      message: "Supabase 서버 환경 변수를 확인해 주세요."
+    });
+  }
+
+  try {
+    const supabase = createClient(url, key);
+
+    const { data: rows, error } = await supabase
+      .from("lotto_history")
+      .select("round, draw_date, num1, num2, num3, num4, num5, num6, bonus")
+      .order("round", { ascending: false })
+      .limit(1000);
+
+    if (error) {
+      console.error("Supabase query error:", error);
+      throw new Error("당첨 데이터 조회에 실패했습니다. 테이블과 컬럼을 확인해 주세요.");
+    }
+
+    if (!rows || rows.length === 0) {
+      throw new Error("lotto_history 테이블에 당첨 데이터가 없습니다.");
+    }
+
+    const stats = makeStats(rows);
+    const numbers = makeCombination();
+    const explanation = await getExplanation(stats, numbers);
+
+    return res.status(200).json({
+      success: true,
+      numbers,
+      statistics: stats,
+      explanation
+    });
+  } catch (error) {
+    console.error("Analysis error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "AI 분석 중 오류가 발생했습니다."
+    });
+  }
+};
