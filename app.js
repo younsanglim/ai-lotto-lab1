@@ -1,230 +1,199 @@
 
-const generateButton = document.getElementById("generateButton");
-const lottoNumbers = document.getElementById("lottoNumbers");
-const message = document.getElementById("message");
+const analyzeBtn = document.getElementById("analyzeBtn");
+const loading = document.getElementById("loading");
+const errorBox = document.getElementById("errorBox");
 
-const loadStatsButton = document.getElementById("loadStatsButton");
-const statsMessage = document.getElementById("statsMessage");
-const statsResults = document.getElementById("statsResults");
-
-const analyzeButton = document.getElementById("analyzeButton");
-const aiMessage = document.getElementById("aiMessage");
-const aiResult = document.getElementById("aiResult");
-
-let currentNumbers = [];
-
-// 로또 번호별 공 색상
-function getBallColor(number) {
-  if (number <= 10) return "#fbc531";
-  if (number <= 20) return "#4a90e2";
-  if (number <= 30) return "#e74c3c";
-  if (number <= 40) return "#8e8e8e";
-  return "#2ecc71";
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
 }
 
-// 로또 번호 6개 생성
-function generateLottoNumbers() {
-  const numbers = [];
+function showError(message) {
+  errorBox.textContent = message;
+  errorBox.classList.remove("hidden");
+}
 
-  while (numbers.length < 6) {
-    const number = Math.floor(Math.random() * 45) + 1;
+function renderNumbers(numbers) {
+  const container = document.getElementById("numberBalls");
 
-    if (!numbers.includes(number)) {
-      numbers.push(number);
-    }
+  if (!Array.isArray(numbers) || numbers.length !== 6) {
+    throw new Error("분석 API에서 올바른 번호 6개를 받지 못했습니다.");
   }
 
-  return numbers.sort((a, b) => a - b);
+  const valid = numbers.every(
+    (n) => Number.isInteger(Number(n)) && Number(n) >= 1 && Number(n) <= 45
+  );
+
+  const sorted = numbers.map(Number).sort((a, b) => a - b);
+
+  if (!valid || new Set(sorted).size !== 6) {
+    throw new Error("추천 번호 형식이 올바르지 않습니다.");
+  }
+
+  container.innerHTML = sorted.map((number, index) => `
+    <span class="ball" style="animation-delay:${index * 60}ms">
+      ${number}
+    </span>
+  `).join("");
+
+  document.getElementById("numberCaption").textContent =
+    "분석용 참고 조합 · 당첨 예측이나 보장 기능이 아닙니다.";
 }
 
-// 생성한 번호 화면에 표시
-function displayLottoNumbers(numbers) {
-  lottoNumbers.innerHTML = "";
+function renderFrequency(items) {
+  const container = document.getElementById("frequencyChart");
 
-  numbers.forEach((number, index) => {
-    const ball = document.createElement("span");
-
-    ball.className = "lotto-ball";
-    ball.textContent = number;
-    ball.style.backgroundColor = getBallColor(number);
-    ball.style.color = "#ffffff";
-    ball.style.animationDelay = `${index * 0.08}s`;
-
-    lottoNumbers.appendChild(ball);
-  });
-}
-
-// 번호 생성 버튼
-generateButton.addEventListener("click", () => {
-  currentNumbers = generateLottoNumbers();
-
-  displayLottoNumbers(currentNumbers);
-
-  message.textContent =
-    "새로운 번호가 생성됐어요! 모든 조합의 당첨 확률은 동일합니다.";
-
-  generateButton.textContent = "다시 생성하기";
-
-  analyzeButton.disabled = false;
-  aiMessage.textContent = "AI 버튼을 눌러 번호 특징을 분석해 보세요.";
-  aiResult.textContent = "";
-});
-
-// Gemini AI 분석 버튼
-analyzeButton.addEventListener("click", async () => {
-  if (currentNumbers.length !== 6) {
-    aiMessage.textContent = "먼저 로또 번호를 생성해 주세요.";
+  if (!Array.isArray(items) || items.length === 0) {
+    container.innerHTML = '<p class="empty-text">출현 빈도 데이터가 없습니다.</p>';
     return;
   }
 
-  analyzeButton.disabled = true;
-  aiMessage.textContent = "Gemini AI가 분석하고 있어요...";
-  aiResult.textContent = "";
+  const max = Math.max(...items.map((item) => Number(item.count) || 0), 1);
+
+  container.innerHTML = items.slice(0, 5).map((item) => {
+    const number = Number(item.number);
+    const count = Number(item.count) || 0;
+    const width = Math.max(0, Math.min(100, count / max * 100));
+
+    return `
+      <div class="frequency-row">
+        <span class="frequency-num">${escapeHTML(number)}</span>
+        <div class="frequency-track">
+          <div class="frequency-fill" style="width:${width}%"></div>
+        </div>
+        <span class="frequency-count">${escapeHTML(count)}회</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderDistribution(elementId, items) {
+  const container = document.getElementById(elementId);
+
+  if (!Array.isArray(items) || items.length === 0) {
+    container.innerHTML = '<p class="empty-text">분포 데이터가 없습니다.</p>';
+    return;
+  }
+
+  const total = items.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+
+  container.innerHTML = items.map((item) => {
+    const count = Number(item.count) || 0;
+    const percent = total ? count / total * 100 : 0;
+
+    return `
+      <div class="distribution-row">
+        <div class="distribution-label">
+          <span>${escapeHTML(item.label)}</span>
+          <strong>${count}회 (${percent.toFixed(1)}%)</strong>
+        </div>
+        <div class="distribution-track">
+          <div class="distribution-fill" style="width:${percent}%"></div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderExplanation(explanation) {
+  const container = document.getElementById("explanationContent");
+
+  const sections = [
+    {
+      title: "전체 데이터 요약",
+      icon: "◈",
+      text: explanation?.summary
+    },
+    {
+      title: "출현 빈도 해설",
+      icon: "↗",
+      text: explanation?.frequency
+    },
+    {
+      title: "번호 분포 해설",
+      icon: "▤",
+      text: explanation?.distribution
+    },
+    {
+      title: "분석 조합 해설",
+      icon: "✳",
+      text: explanation?.combination
+    }
+  ];
+
+  const cards = sections.map((section) => `
+    <article class="insight-card">
+      <h3><span>${section.icon}</span>${section.title}</h3>
+      <p>${escapeHTML(section.text || "이 항목의 해설이 제공되지 않았습니다.")}</p>
+    </article>
+  `).join("");
+
+  container.innerHTML = `
+    <div class="insight-grid">
+      ${cards}
+      <article class="insight-card wide">
+        <h3><span>ⓘ</span>분석 결과를 해석할 때 주의할 점</h3>
+        <p>${escapeHTML(
+          explanation?.caution ||
+          "과거 통계는 기록된 결과를 요약할 뿐, 미래 당첨 번호를 예측하지 않습니다."
+        )}</p>
+      </article>
+    </div>
+  `;
+}
+
+function renderDashboard(data) {
+  renderNumbers(data.numbers);
+
+  const stats = data.statistics || {};
+  const explanation = data.explanation || {};
+
+  document.getElementById("roundCount").textContent =
+    Number(stats.roundCount || 0).toLocaleString("ko-KR");
+
+  document.getElementById("latestRound").textContent =
+    stats.latestRound ? `${stats.latestRound}회` : "-";
+
+  document.getElementById("dataStatus").textContent =
+    `분석 완료 · ${Number(stats.roundCount || 0).toLocaleString("ko-KR")}개 회차`;
+
+  renderFrequency(stats.frequency);
+  renderDistribution("oddEvenStats", stats.oddEven);
+  renderDistribution("rangeStats", stats.ranges);
+  renderExplanation(explanation);
+}
+
+analyzeBtn.addEventListener("click", async () => {
+  analyzeBtn.disabled = true;
+  loading.classList.remove("hidden");
+  errorBox.classList.add("hidden");
 
   try {
     const response = await fetch("/api/analyze", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        numbers: currentNumbers
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
+    if (!response.ok || !data.success) {
       throw new Error(
-        data.error || "AI 분석에 실패했어요."
+        data.message || "분석에 실패했습니다. 잠시 후 다시 시도해 주세요."
       );
     }
 
-    aiResult.textContent = data.result;
-    aiMessage.textContent = "AI 분석이 완료됐어요!";
+    renderDashboard(data);
   } catch (error) {
-    console.error("AI 분석 오류:", error);
-
-    aiMessage.textContent =
-      error.message || "연결에 실패했어요. 다시 시도해 주세요.";
+    console.error("AI analysis error:", error);
+    showError(error.message || "서버 연결에 실패했습니다.");
   } finally {
-    analyzeButton.disabled = false;
-  }
-});
-
-// 과거 당첨 번호 통계
-loadStatsButton.addEventListener("click", async () => {
-  loadStatsButton.disabled = true;
-  statsMessage.textContent = "당첨 데이터를 불러오는 중이에요...";
-  statsResults.innerHTML = "";
-
-  try {
-    const response = await fetch(
-      "https://smok95.github.io/lotto/results/all.json"
-    );
-
-    if (!response.ok) {
-      throw new Error("당첨 데이터 요청에 실패했어요.");
-    }
-
-    const rawData = await response.json();
-
-    const draws = Array.isArray(rawData)
-      ? rawData
-      : [rawData];
-
-    const validDraws = draws
-      .map((draw) => ({
-        round: Number(draw.draw_no),
-        numbers: draw.numbers
-      }))
-      .filter(
-        (draw) =>
-          Number.isFinite(draw.round) &&
-          Array.isArray(draw.numbers) &&
-          draw.numbers.length === 6 &&
-          draw.numbers.every(
-            (number) =>
-              Number.isInteger(Number(number)) &&
-              Number(number) >= 1 &&
-              Number(number) <= 45
-          )
-      )
-      .sort((a, b) => a.round - b.round);
-
-    if (validDraws.length === 0) {
-      throw new Error("분석할 수 있는 당첨 데이터가 없어요.");
-    }
-
-    const frequency = Array(46).fill(0);
-
-    validDraws.forEach((draw) => {
-      draw.numbers.forEach((number) => {
-        frequency[Number(number)]++;
-      });
-    });
-
-    const mostFrequent = Array.from(
-      { length: 45 },
-      (_, index) => index + 1
-    )
-      .sort(
-        (a, b) =>
-          frequency[b] - frequency[a] || a - b
-      )
-      .slice(0, 10);
-
-    const recentDraws = validDraws.slice(-5).reverse();
-
-    const cards = [
-      {
-        title: "분석한 회차",
-        content: `${validDraws.length.toLocaleString()}회`
-      },
-      {
-        title: "가장 자주 나온 번호 TOP 10",
-        content: mostFrequent
-          .map(
-            (number) =>
-              `${number}번 (${frequency[number]}회)`
-          )
-          .join("\n")
-      },
-      {
-        title: "최근 당첨 번호",
-        content: recentDraws
-          .map(
-            (draw) =>
-              `${draw.round}회: ${draw.numbers.join(", ")}`
-          )
-          .join("\n")
-      }
-    ];
-
-    cards.forEach((item) => {
-      const card = document.createElement("div");
-      card.className = "stat-card";
-
-      const title = document.createElement("h3");
-      title.textContent = item.title;
-
-      const content = document.createElement("p");
-      content.style.whiteSpace = "pre-line";
-      content.textContent = item.content;
-
-      card.appendChild(title);
-      card.appendChild(content);
-      statsResults.appendChild(card);
-    });
-
-    statsMessage.textContent =
-      "통계 데이터를 불러왔어요. 과거 출현 빈도가 미래 당첨 확률을 높여 주지는 않습니다.";
-  } catch (error) {
-    console.error("통계 오류:", error);
-
-    statsMessage.textContent =
-      "통계 데이터를 불러오지 못했어요. 데이터 연결을 확인해 주세요.";
-  } finally {
-    loadStatsButton.disabled = false;
+    analyzeBtn.disabled = false;
+    loading.classList.add("hidden");
   }
 });
