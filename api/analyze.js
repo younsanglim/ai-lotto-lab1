@@ -21,10 +21,9 @@ function makeStats(rows) {
   ];
 
   for (const row of rows) {
-    const numbers = [
-      row.num1, row.num2, row.num3,
-      row.num4, row.num5, row.num6
-    ].map(Number);
+    const numbers = Array.isArray(row.numbers)
+      ? row.numbers.map(Number)
+      : [];
 
     for (const n of numbers) {
       if (!Number.isInteger(n) || n < 1 || n > 45) continue;
@@ -40,7 +39,7 @@ function makeStats(rows) {
   return {
     roundCount: rows.length,
     latestRound: rows.length
-      ? Math.max(...rows.map((row) => Number(row.round) || 0))
+      ? Math.max(...rows.map(row => Number(row.draw_number) || 0))
       : 0,
     frequency: frequency
       .sort((a, b) => b.count - a.count || a.number - b.number)
@@ -69,27 +68,28 @@ async function getExplanation(stats, numbers) {
   }
 
   const prompt = `
-너는 로또 과거 데이터 통계를 쉽게 설명하는 데이터 분석 도우미야.
+너는 로또 과거 당첨 번호 통계를 쉽게 설명하는 데이터 분석 도우미야.
 
-아래 통계는 실제 과거 당첨 데이터에서 계산한 값이야.
-분석 조합은 무작위로 생성되었으며, 미래 당첨 예측 결과가 아니야.
+아래 통계는 Supabase에 저장된 과거 데이터에서 계산했어.
+추천 번호는 무작위로 생성했으며 당첨 예측이 아니야.
 
-분석 데이터:
+통계:
 ${JSON.stringify(stats)}
 
-참고 조합:
+생성 번호:
 ${JSON.stringify(numbers)}
 
-한국어로 설명해. 과장하지 말고, 출현 빈도가 높다고 미래 당첨 가능성이 높다고 말하지 마.
-정확한 수치가 제공되지 않은 사실은 추측하지 마.
-아래 JSON 형식으로만 답해. 마크다운 코드 블록은 쓰지 마.
+한국어로 쉽고 구체적으로 설명해.
+출현 빈도가 높다고 미래 당첨 확률이 높다고 말하지 마.
+데이터에서 확인할 수 없는 내용은 추측하지 마.
 
+다음 JSON 형식으로만 답해. 마크다운은 사용하지 마.
 {
-  "summary": "분석한 데이터와 회차 수에 대한 쉬운 요약",
-  "frequency": "출현 빈도 상위 번호 통계의 의미와 한계",
-  "distribution": "홀짝 비율 및 번호 구간 분포의 특징",
-  "combination": "생성된 번호 조합의 홀짝 및 구간 분포를 설명",
-  "caution": "과거 통계와 무작위 추첨에 관한 주의사항"
+  "summary": "분석 데이터와 회차 수 요약",
+  "frequency": "출현 빈도 상위 번호와 그 한계",
+  "distribution": "홀짝 비율과 번호 구간 분포",
+  "combination": "생성된 번호 조합의 홀짝 및 구간 분포",
+  "caution": "무작위 추첨과 과거 통계에 관한 주의사항"
 }
 `;
 
@@ -119,17 +119,27 @@ ${JSON.stringify(numbers)}
 
   const result = await response.json();
   const text = result.candidates?.[0]?.content?.parts
-    ?.map((part) => part.text || "")
+    ?.map(part => part.text || "")
     .join("");
 
   if (!text) {
     throw new Error("Gemini에서 분석 해설을 받지 못했습니다.");
   }
 
-  const explanation = JSON.parse(text);
+  let explanation;
+
+  try {
+    explanation = JSON.parse(text);
+  } catch {
+    throw new Error("AI 해설을 JSON으로 읽을 수 없습니다.");
+  }
 
   for (const key of [
-    "summary", "frequency", "distribution", "combination", "caution"
+    "summary",
+    "frequency",
+    "distribution",
+    "combination",
+    "caution"
   ]) {
     if (typeof explanation[key] !== "string") {
       throw new Error("AI 해설의 응답 형식이 올바르지 않습니다.");
@@ -154,7 +164,8 @@ module.exports = async (req, res) => {
   if (!url || !key) {
     return res.status(500).json({
       success: false,
-      message: "Supabase 서버 환경 변수를 확인해 주세요."
+      message:
+        "Vercel 환경 변수 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY를 확인해 주세요."
     });
   }
 
@@ -163,20 +174,47 @@ module.exports = async (req, res) => {
 
     const { data: rows, error } = await supabase
       .from("lotto_history")
-      .select("round, draw_date, num1, num2, num3, num4, num5, num6, bonus")
-      .order("round", { ascending: false })
+      .select("draw_number, numbers")
+      .order("draw_number", { ascending: false })
       .limit(1000);
 
     if (error) {
       console.error("Supabase query error:", error);
-      throw new Error("당첨 데이터 조회에 실패했습니다. 테이블과 컬럼을 확인해 주세요.");
+
+      return res.status(500).json({
+        success: false,
+        message: "Supabase 데이터 조회 오류: " + error.message
+      });
     }
 
     if (!rows || rows.length === 0) {
-      throw new Error("lotto_history 테이블에 당첨 데이터가 없습니다.");
+      return res.status(400).json({
+        success: false,
+        message:
+          "당첨 데이터가 없습니다. Supabase lotto_history 테이블에 회차별 당첨 번호를 먼저 저장해 주세요."
+      });
     }
 
-    const stats = makeStats(rows);
+    const validRows = rows.filter(row =>
+      Number.isInteger(Number(row.draw_number)) &&
+      Array.isArray(row.numbers) &&
+      row.numbers.length === 6 &&
+      row.numbers.every(n =>
+        Number.isInteger(Number(n)) &&
+        Number(n) >= 1 &&
+        Number(n) <= 45
+      )
+    );
+
+    if (validRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "저장된 데이터 형식이 올바르지 않습니다. numbers에는 당첨 번호 6개가 배열로 저장되어야 합니다."
+      });
+    }
+
+    const stats = makeStats(validRows);
     const numbers = makeCombination();
     const explanation = await getExplanation(stats, numbers);
 
