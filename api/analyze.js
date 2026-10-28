@@ -1,11 +1,7 @@
 
 const { createClient } = require("@supabase/supabase-js");
 
-// Google 오류 메시지에서 안내한 모델명
 const GEMINI_MODEL = "gemini-3.8-flash";
-
-const sleep = (ms) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
@@ -15,7 +11,7 @@ function getSupabase() {
 
   if (!url || !key) {
     throw new Error(
-      "Supabase 환경 변수 확인 필요: SUPABASE_URL과 서버용 키를 등록해 주세요."
+      "Supabase 환경 변수 SUPABASE_URL과 서버용 키를 확인해 주세요."
     );
   }
 
@@ -55,16 +51,50 @@ function normalizeNumbers(value) {
 
 function makeStats(rows) {
   const frequency = Array(46).fill(0);
-  let totalDraws = 0;
+  let oddCount = 0;
+  let evenCount = 0;
+
+  const ranges = [
+    { label: "1~10번", min: 1, max: 10, count: 0 },
+    { label: "11~20번", min: 11, max: 20, count: 0 },
+    { label: "21~30번", min: 21, max: 30, count: 0 },
+    { label: "31~40번", min: 31, max: 40, count: 0 },
+    { label: "41~45번", min: 41, max: 45, count: 0 },
+  ];
+
+  const validRows = [];
 
   for (const row of rows) {
     const nums = normalizeNumbers(row.numbers);
-    if (!nums) continue;
+    const drawNumber = Number(row.draw_number);
 
-    totalDraws++;
+    if (
+      !nums ||
+      !Number.isInteger(drawNumber) ||
+      drawNumber <= 0
+    ) {
+      continue;
+    }
+
+    validRows.push({
+      draw_number: drawNumber,
+      numbers: nums,
+    });
 
     for (const n of nums) {
       frequency[n]++;
+
+      if (n % 2 === 1) {
+        oddCount++;
+      } else {
+        evenCount++;
+      }
+
+      const range = ranges.find(
+        (item) => n >= item.min && n <= item.max
+      );
+
+      if (range) range.count++;
     }
   }
 
@@ -73,14 +103,32 @@ function makeStats(rows) {
     count: frequency[i + 1],
   }));
 
+  const hotNumbers = [...ranking]
+    .sort((a, b) => b.count - a.count || a.number - b.number)
+    .slice(0, 10);
+
+  const coldNumbers = [...ranking]
+    .sort((a, b) => a.count - b.count || a.number - b.number)
+    .slice(0, 10);
+
+  const latestRound = validRows.length
+    ? Math.max(...validRows.map((row) => row.draw_number))
+    : null;
+
   return {
-    totalDraws,
-    hotNumbers: [...ranking]
-      .sort((a, b) => b.count - a.count || a.number - b.number)
-      .slice(0, 10),
-    coldNumbers: [...ranking]
-      .sort((a, b) => a.count - b.count || a.number - b.number)
-      .slice(0, 10),
+    totalDraws: validRows.length,
+    latestRound,
+    frequency: hotNumbers,
+    hotNumbers,
+    coldNumbers,
+    oddEven: [
+      { label: "홀수", count: oddCount },
+      { label: "짝수", count: evenCount },
+    ],
+    ranges: ranges.map(({ label, count }) => ({
+      label,
+      count,
+    })),
   };
 }
 
@@ -100,123 +148,151 @@ function makeFallbackExplanation(numbers, stats) {
 
   const hot = stats.hotNumbers
     .slice(0, 5)
-    .map((x) => `${x.number}번(${x.count}회)`)
+    .map((item) => `${item.number}번(${item.count}회)`)
     .join(", ");
 
-  return [
-    `생성된 번호는 ${numbers.join(", ")}입니다.`,
-    `홀수 ${odd}개, 짝수 ${6 - odd}개로 구성되어 있습니다.`,
-    `1~22 구간은 ${low}개, 23~45 구간은 ${6 - low}개입니다.`,
-    `분석한 과거 회차는 ${stats.totalDraws}회입니다.`,
-    `과거 출현 빈도가 높은 번호는 ${hot || "아직 없습니다"}.`,
-    "현재 AI 해설을 불러오지 못해 기본 통계 해설을 표시했습니다. 과거 출현 기록이 미래 당첨 확률을 높여 주지는 않습니다.",
-  ].join(" ");
+  const mostCommonRange = [...stats.ranges]
+    .sort((a, b) => b.count - a.count)[0];
+
+  return {
+    summary:
+      `총 ${stats.totalDraws}개 회차의 유효한 당첨 번호를 분석했습니다. ` +
+      `가장 최근 데이터의 회차는 ${stats.latestRound}회입니다.`,
+
+    frequency:
+      `출현 빈도가 높은 번호는 ${hot || "아직 없습니다"}. ` +
+      `이 횟수는 과거 기록을 요약한 것이며 다음 당첨을 예측하지는 않습니다.`,
+
+    distribution:
+      `전체 당첨 번호 기록에서 홀수는 ${stats.oddEven[0].count}회, ` +
+      `짝수는 ${stats.oddEven[1].count}회 출현했습니다. ` +
+      `가장 많이 출현한 구간은 ${mostCommonRange?.label || "없음"}입니다.`,
+
+    combination:
+      `생성된 조합은 ${numbers.join(", ")}입니다. ` +
+      `홀수 ${odd}개, 짝수 ${6 - odd}개이며, ` +
+      `1~22번은 ${low}개, 23~45번은 ${6 - low}개입니다.`,
+
+    caution:
+      "이 조합은 무작위로 생성한 분석용 참고 번호입니다. " +
+      "과거 출현 빈도나 홀짝 비율이 미래 당첨 확률을 높여 주지는 않습니다.",
+  };
 }
 
 async function getExplanation(numbers, stats) {
   const apiKey = process.env.GEMINI_API_KEY;
 
+  const fallback = makeFallbackExplanation(numbers, stats);
+
   if (!apiKey) {
     return {
-      explanation: makeFallbackExplanation(numbers, stats),
+      explanation: fallback,
       aiUsed: false,
-      aiError: "Vercel에 GEMINI_API_KEY 환경 변수가 없습니다.",
+      aiError: "Vercel의 GEMINI_API_KEY 환경 변수를 확인해 주세요.",
     };
   }
 
   const prompt = `
-너는 AI 로또 연구소의 통계 해설 담당자야.
+너는 학생도 이해할 수 있게 설명하는 로또 통계 분석 도우미야.
 
-다음 데이터를 학생도 이해할 수 있는 쉬운 한국어로 4~6문장 해설해 줘.
+다음 데이터를 바탕으로 한국어 해설을 작성해.
+반드시 JSON 객체만 반환해. 마크다운이나 코드 블록은 쓰지 마.
 
-분석 번호: ${numbers.join(", ")}
-분석한 유효 회차 수: ${stats.totalDraws}
-출현 빈도가 높은 번호:
-${stats.hotNumbers.map((x) => `${x.number}번 ${x.count}회`).join(", ")}
-출현 빈도가 낮은 번호:
-${stats.coldNumbers.map((x) => `${x.number}번 ${x.count}회`).join(", ")}
+반환 형식:
+{
+  "summary": "전체 데이터 요약",
+  "frequency": "출현 빈도 해설",
+  "distribution": "홀짝과 번호 구간 분포 해설",
+  "combination": "생성된 번호 조합 해설",
+  "caution": "통계 해석 시 주의할 점"
+}
 
-번호의 홀짝 구성, 구간 분포, 과거 출현 빈도를 설명해 줘.
-과거 기록으로 미래 당첨을 예측할 수 있다고 단정하지 마.
+분석 회차 수: ${stats.totalDraws}
+가장 최근 회차: ${stats.latestRound}
+출현 빈도 상위 번호: ${JSON.stringify(stats.hotNumbers.slice(0, 5))}
+출현 빈도 하위 번호: ${JSON.stringify(stats.coldNumbers.slice(0, 5))}
+홀짝 통계: ${JSON.stringify(stats.oddEven)}
+번호 구간 통계: ${JSON.stringify(stats.ranges)}
+생성된 조합: ${JSON.stringify(numbers)}
+
+각 항목을 1~3개의 쉬운 문장으로 작성해.
+실제 통계 수치에 근거해서 설명해.
+과거 기록으로 미래 당첨 번호를 예측할 수 있다고 주장하지 마.
 `;
 
-  let lastError = "";
-
-  // 최대 3회 요청
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [{ text: prompt }],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.4,
-              maxOutputTokens: 800,
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }],
             },
-          }),
-        }
-      );
-
-      const body = await response.text();
-
-      if (!response.ok) {
-        lastError = `HTTP ${response.status}: ${body}`;
-
-        // 일시적 오류가 아니면 즉시 기본 해설로 전환
-        if (![408, 429, 500, 502, 503, 504].includes(response.status)) {
-          break;
-        }
-      } else {
-        const result = JSON.parse(body);
-        const explanation = result.candidates?.[0]?.content?.parts
-          ?.map((part) => part.text || "")
-          .join("")
-          .trim();
-
-        if (explanation) {
-          return {
-            explanation,
-            aiUsed: true,
-            aiError: null,
-          };
-        }
-
-        lastError = "Gemini 응답에 해설 텍스트가 없습니다.";
+          ],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 1200,
+            responseMimeType: "application/json",
+          },
+        }),
       }
-    } catch (error) {
-      lastError = error.message || String(error);
+    );
+
+    const body = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`Gemini HTTP ${response.status}: ${body}`);
     }
 
-    if (attempt < 2) {
-      await sleep(1000 * Math.pow(2, attempt));
+    const result = JSON.parse(body);
+    const text = result.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join("")
+      .trim();
+
+    if (!text) {
+      throw new Error("Gemini 응답에 해설이 없습니다.");
     }
+
+    const parsed = JSON.parse(text);
+
+    const explanation = {
+      summary: parsed.summary || fallback.summary,
+      frequency: parsed.frequency || fallback.frequency,
+      distribution: parsed.distribution || fallback.distribution,
+      combination: parsed.combination || fallback.combination,
+      caution: parsed.caution || fallback.caution,
+    };
+
+    return {
+      explanation,
+      aiUsed: true,
+      aiError: null,
+    };
+  } catch (error) {
+    console.error("Gemini API 오류:", error.message);
+
+    return {
+      explanation: fallback,
+      aiUsed: false,
+      aiError: error.message,
+    };
   }
-
-  console.error("Gemini API 오류:", lastError);
-
-  return {
-    explanation: makeFallbackExplanation(numbers, stats),
-    aiUsed: false,
-    aiError: lastError,
-  };
 }
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
+
     return res.status(405).json({
       success: false,
-      error: "POST 요청만 허용됩니다.",
+      message: "POST 요청만 허용됩니다.",
     });
   }
 
@@ -239,37 +315,42 @@ module.exports = async function handler(req, res) {
       );
     }
 
-    const validRows = rows.filter(
-      (row) =>
-        Number.isInteger(Number(row.draw_number)) &&
-        Number(row.draw_number) > 0 &&
-        normalizeNumbers(row.numbers) !== null
-    );
+    const stats = makeStats(rows);
 
-    if (validRows.length === 0) {
+    if (stats.totalDraws === 0) {
       throw new Error(
-        "유효한 당첨 번호가 없습니다. numbers 배열과 실제 저장 데이터를 확인해 주세요."
+        "유효한 당첨 번호가 없습니다. numbers 열에 회차별 번호 6개가 저장되어 있는지 확인해 주세요."
       );
     }
 
-    const stats = makeStats(validRows);
     const numbers = makeCombination();
     const aiResult = await getExplanation(numbers, stats);
+
+    const statistics = {
+      roundCount: stats.totalDraws,
+      latestRound: stats.latestRound,
+      frequency: stats.frequency,
+      hotNumbers: stats.hotNumbers,
+      coldNumbers: stats.coldNumbers,
+      oddEven: stats.oddEven,
+      ranges: stats.ranges,
+    };
 
     return res.status(200).json({
       success: true,
       numbers,
       recommendedNumbers: numbers,
+      statistics,
+      stats,
+      totalDraws: stats.totalDraws,
       explanation: aiResult.explanation,
       aiExplanation: aiResult.explanation,
       analysis: aiResult.explanation,
       aiUsed: aiResult.aiUsed,
       aiError: aiResult.aiError,
-      stats,
-      totalDraws: stats.totalDraws,
       message: aiResult.aiUsed
-        ? "AI 분석이 완료되었습니다."
-        : "기본 통계 분석을 표시했습니다. AI 해설은 현재 사용할 수 없습니다.",
+        ? "AI 통계 분석이 완료되었습니다."
+        : "통계 분석은 완료되었지만 AI 해설 대신 기본 해설을 표시했습니다.",
     });
   } catch (error) {
     console.error("Analysis error:", error);
